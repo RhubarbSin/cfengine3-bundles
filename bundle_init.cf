@@ -1,0 +1,12 @@
+# -*- mode: cfengine3 -*-
+# $Id$
+
+bundle common init {
+  classes:
+      "debug"
+      expression => isgreaterthan("$(site.debug)", "0");
+
+  reports:
+      cfengine::
+      "debug = $(site.debug)";
+}

@@ -1,0 +1,158 @@
+# -*- mode: cfengine3 -*-
+# $Id$
+
+bundle agent process_users {
+  vars:
+      "users"
+      slist => getindices("site.user"),
+      comment => "List of defined users (valid or not)";
+
+  methods:
+      "users"
+      usebundle => set_user("$(users)", "site.user[$(users)]"),
+      comment => "Call set_user bundle for each user in users list";
+}
+
+bundle agent set_user(username, param) {
+  vars:
+      # get account's attributes from param array
+      "password" string => "$($(param)[password])";
+      "groups" slist => {"@($(param)[groups])", "$(username)"};
+      "gecos" string => "$($(param)[gecos])";
+      "shell" string => "$($(param)[shell])";
+      "valid" string => "$($(param)[valid])";
+      "locked" string => "$($(param)[locked])";
+
+      "password_esc" string => escape("$(password)"),
+      comment => "Escaped string for use by regline";
+      "gecos_esc" string => escape("$(gecos)");
+
+      "current_groups" slist => splitstring(execresult("/usr/bin/id -Gn $(username)", noshell), " ", "666");
+
+  classes:
+      "valid"
+      expression => regcmp("(?i)true|yes", "$(valid)");
+
+      "locked"
+      expression => regcmp("(?i)true|yes", "$(locked)");
+
+      "found_user"
+      expression => userexists("$(username)");
+
+      "found_password"
+      expression => regline("^$(username):$(password_esc):.*", "/etc/shadow");
+
+      "found_group_$(groups)"
+      expression => groupexists("$(groups)");
+
+      "found_membership_in_$(groups)"
+      or => {regline("^$(groups):.*:$(username)$", "/etc/group"),
+             regline("^$(groups):.*:$(username),", "/etc/group"),
+             regline("^$(groups):.*:.*,$(username),", "/etc/group"),
+             regline("^$(groups):.*:.*,$(username)$", "/etc/group")},
+      comment => "User is a member of the group";
+
+      "found_invalid_membership"
+      not => reglist("@(groups)", "$(current_groups)");
+      # "found_invalid_membership_in_$(current_groups)"
+      # not => reglist("@(groups)", "$(current_groups)");
+
+      "found_gecos"
+      expression => regline("^$(username):.*:.*:.*:$(gecos_esc):.*", "/etc/passwd");
+
+      "found_shell"
+      expression => regline("^$(username):.*:.*:.*:.*:$(shell)$", "/etc/passwd");
+
+      "found_lock"
+      expression => regline("^$(username):!.*", "/etc/shadow");
+
+  commands:
+    !found_user&valid::
+      "/usr/sbin/useradd $(username)"
+      classes => if_repaired("added_user");
+
+    found_user&!valid::
+      "/usr/sbin/userdel -r $(username)"
+      classes => if_repaired("deleted_user");
+
+    found_invalid_membership::
+      "/usr/sbin/usermod -G '' $(username)",
+      classes => if_repaired("cleared_memberships");
+    # any::
+    #   "/usr/sbin/usermod -G '' $(username)",
+    #   ifvarclass => "found_invalid_membership_in_$(current_groups)",
+    #   classes => if_repaired("cleared_memberships");
+
+    found_user::
+      "/usr/sbin/usermod -a -G $(groups) $(username)"
+      ifvarclass => "found_group_$(groups)&!found_membership_in_$(groups)",
+      classes => if_repaired("added_membership_in_$(groups)");
+
+    found_user&!found_password&!locked::
+      "/usr/sbin/usermod -p '$(password)' $(username)"
+      classes => if_repaired("changed_password");
+
+    found_user&!found_gecos::
+      "/usr/sbin/usermod -c '$(gecos)' $(username)"
+      classes => if_repaired("changed_gecos");
+
+    found_user&!found_shell::
+      "/usr/sbin/usermod -s '$(shell)' $(username)"
+      classes => if_repaired("changed_shell");
+
+    found_user&!found_lock&locked::
+      "/usr/sbin/usermod -L $(username)"
+      classes => if_repaired("locked_user");
+
+    found_user&found_lock&!locked::
+      "/usr/sbin/usermod -U $(username)"
+      classes => if_repaired("unlocked_user"),
+      comment => "Unlock user";
+
+  reports:
+    debug::
+      "username = $(username)";
+      "password = $(password)";
+      "group = $(groups)";
+      "gecos = $(gecos)";
+      "shell = $(shell)";
+      "valid = $(valid)";
+      "current_groups = $(current_groups)";
+
+      "found_invalid_membership_in_$(current_groups)"
+      ifvarclass => "found_invalid_membership_in_$(current_groups)";
+
+      "Added group $(groups) on $(sys.host)."
+      ifvarclass => "added_group_$(groups)";
+
+      "Added membership in $(groups) for $(username) on $(sys.host)."
+      ifvarclass => "added_membership_in_$(groups)";
+
+    added_user::
+      "Added user $(username) on $(sys.host).";
+
+    deleted_user::
+      "Deleted user $(username) on $(sys.host).";
+
+    cleared_memberships::
+      "Cleared memberships for $(username) on $(sys.host).";
+      
+    changed_password::
+      "Changed password for $(username) on $(sys.host).";
+
+    changed_gecos::
+      "Changed GECOS for $(username) on $(sys.host).";
+
+    changed_shell::
+      "Changed shell for $(username) on $(sys.host).";
+
+    locked_user::
+      "Locked user $(username) on $(sys.host).";
+
+    unlocked_user::
+      "Unlocked user $(username) on $(sys.host).";
+
+    cfengine::
+      "Failed to find group $(groups) on $(sys.host)."
+      ifvarclass => "!found_group_$(groups)";
+}

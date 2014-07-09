@@ -1,0 +1,3 @@
+#+TITLE: CFEngine 3 Bundles for Linux Users and Groups
+
+I never got around to implementing CFEngine, and I don't recall the exact state of this project, but I think it worked to the extent that it had been completed. The target was RHEL/CentOS systems. Perhaps it will be useful at some point.

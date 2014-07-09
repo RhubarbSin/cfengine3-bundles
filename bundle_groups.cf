@@ -1,0 +1,40 @@
+# -*- mode: cfengine3 -*-
+# $Id$
+
+bundle agent process_groups {
+  vars:
+      "groups" slist => getindices("site.group");
+
+  methods:
+      "groups"
+      usebundle => set_group("$(groups)", "$(site.group[$(groups)][valid])");
+}
+
+bundle agent set_group(groupname, valid) {
+  classes:
+      "valid"
+      expression => regcmp("(?i)true|yes", "$(valid)");
+
+      "found_group"
+      expression => groupexists("$(groupname)");
+
+  commands:
+    !found_group&valid::
+      "/usr/sbin/groupadd $(groupname)"
+      classes => if_repaired("added_group");
+
+    found_group&!valid::
+      "/usr/sbin/groupdel $(groupname)"
+      classes => if_repaired("deleted_group");
+
+  reports:
+    added_group::
+      "Added group $(groupname) on $(sys.host).";
+
+    deleted_group::
+      "Deleted group $(groupname) on $(sys.host).";
+
+    debug::
+      "group = $(groupname)";
+      "valid = $(valid)";
+}

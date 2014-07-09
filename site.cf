@@ -1,0 +1,25 @@
+# -*- mode: cfengine3 -*-
+# $Id: site.cf,v 1.2 2012/08/01 18:54:21 root Exp $
+
+bundle common site {
+  vars:
+      "debug" int => "1";
+
+      "user[foo][gecos]" string => "Mr. Foo";
+      # "user[foo][groups]" slist => {"$(default_groups)"};
+      "user[foo][groups]" slist => {"wheel", "testy"},
+      comment => "Account's secondary group memberships";
+      "user[foo][password]" string => "baz";
+      "user[foo][shell]" string => "$(default_shell)";
+      "user[foo][valid]" string => "yes",
+      comment => "Set to 'no' to delete account";
+      "user[foo][locked]" string => "no";
+      # TODO: SSH keys
+
+      "default_groups" slist => {"cf_null"};
+      "default_shell" string => "/bin/bash";
+
+      "group[testy][valid]" string => "no";
+      "group[testy][password]" string => "x",
+      comment => "Place-holder: support for group passwords is not implemented";
+}
